@@ -64,22 +64,31 @@ async function handleLinksRequest(request, env, ctx, LINKS) {
 
 // 获取链接 (带缓存)
 async function handleGetLinks(request, ctx, LINKS) {
+  // 检查是否有强制刷新参数
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.has('refresh');
+  
   const cache = caches.default;
   const cacheKey = new Request(request.url, request);
 
-  let response = await cache.match(cacheKey);
-  if (response) {
-    response = new Response(response.body, response);
-    response.headers.set('X-Cache', 'HIT');
-    return addCorsHeaders(response);
+  // 如果有强制刷新参数，跳过缓存检查
+  if (!forceRefresh) {
+    const cachedResponse = await cache.match(cacheKey);
+    if (cachedResponse) {
+      const response = new Response(cachedResponse.body, cachedResponse);
+      response.headers.set('X-Cache', 'HIT');
+      return addCorsHeaders(response);
+    }
   }
 
+  // 从KV获取最新数据
   const links = await getLinksFromKV(LINKS);
-  response = createJsonResponse(links);
+  const response = createJsonResponse(links);
   response.headers.set('X-Cache', 'MISS');
-
+  
+  // 更新缓存
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
+  
   return response;
 }
 
