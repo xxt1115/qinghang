@@ -26,6 +26,8 @@ async function handleRequest(request, env, ctx) {
         return handleLogin(request, env);
       case '/api/links':
         return handleLinksRequest(request, env, ctx, LINKS);
+      case '/api/links/bulk':
+        return handleBulkAddRequest(request, env, LINKS);
       case '/api/validate':
         return handleValidateToken(request, env);
       case '/api/clear-cache':
@@ -38,6 +40,48 @@ async function handleRequest(request, env, ctx) {
     return createJsonResponse({ error: 'Internal server error' }, 500);
   }
 }
+
+// 批量添加链接
+async function handleBulkAddLinks(request, LINKS) {
+  const linksToAdd = await request.json();
+
+  if (!Array.isArray(linksToAdd)) {
+    return createJsonResponse({ error: 'Expected an array of links' }, 400);
+  }
+
+  const currentLinks = await getLinksFromKV(LINKS);
+
+  const newLinks = linksToAdd.map(link => ({
+    id: Date.now().toString() + Math.random().toString(36).slice(2), // 避免重复
+    name: link.name?.trim() || 'Unnamed',
+    url: link.url?.trim() || '',
+    category: link.category?.trim() || 'default',
+    icon: link.icon?.trim() || '',
+    createdAt: new Date().toISOString()
+  }));
+
+  const updatedLinks = currentLinks.concat(newLinks);
+
+  await LINKS.put('links', JSON.stringify(updatedLinks));
+
+  return createJsonResponse({ success: true, added: newLinks.length });
+}
+
+async function handleBulkAddRequest(request, env, LINKS) {
+  if (request.method !== 'POST') {
+    return createJsonResponse({ error: 'Method not allowed' }, 405);
+  }
+
+  const authResult = await verifyAdmin(request, env);
+  if (!authResult.valid) {
+    return createJsonResponse({ error: 'Unauthorized' }, 401);
+  }
+
+  return handleBulkAddLinks(request, LINKS);
+}
+
+
+
 
 // 路由处理器
 async function handleLinksRequest(request, env, ctx, LINKS) {
