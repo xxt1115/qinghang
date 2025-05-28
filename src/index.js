@@ -112,11 +112,6 @@ async function handleAddLink(request, LINKS) {
   return createJsonResponse({ success: true, id: newLink.id });
 }
 
-// 更新链接 (需要实现)
-async function handleUpdateLink(request, LINKS) {
-  // 实现更新逻辑
-  return createJsonResponse({ error: 'Not implemented' }, 501);
-}
 
 // 删除链接
 async function handleDeleteLink(request, LINKS) {
