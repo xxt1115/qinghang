@@ -118,10 +118,46 @@ async function handleUpdateLink(request, LINKS) {
   return createJsonResponse({ error: 'Not implemented' }, 501);
 }
 
-// 删除链接 (需要实现)
+// 删除链接
 async function handleDeleteLink(request, LINKS) {
-  // 实现删除逻辑
-  return createJsonResponse({ error: 'Not implemented' }, 501);
+  try {
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+    
+    if (!id) {
+      return createJsonResponse({ error: 'Missing link ID parameter' }, 400);
+    }
+
+    // 获取当前所有链接
+    const links = await getLinksFromKV(LINKS);
+    
+    // 查找要删除的链接索引
+    const linkIndex = links.findIndex(link => link.id === id);
+    
+    if (linkIndex === -1) {
+      return createJsonResponse({ error: 'Link not found' }, 404);
+    }
+
+    // 删除链接
+    links.splice(linkIndex, 1);
+    
+    // 更新KV存储
+    await LINKS.put('links', JSON.stringify(links));
+    
+    // 返回成功响应
+    return createJsonResponse({ 
+      success: true,
+      message: 'Link deleted successfully',
+      deletedId: id
+    });
+    
+  } catch (err) {
+    console.error('Delete link error:', err);
+    return createJsonResponse({ 
+      error: 'Failed to delete link',
+      details: err.message 
+    }, 500);
+  }
 }
 
 // 登录处理
