@@ -21,8 +21,7 @@
   "kv_namespaces": [
     {
       "binding": "LINKS",
-      "id": "${KV_LINKS_ID}", // 使用环境变量
-      "preview_id": "${KV_LINKS_PREVIEW_ID}" // 使用环境变量
+      "id": "83c234e573d143a0bfa5cdc601a49b65"
     }
   ]
 
