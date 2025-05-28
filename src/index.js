@@ -15,8 +15,9 @@ async function handleRequest(request, env, ctx) {
     delete: async (key) => await env.LINKS.delete(key)
   };
 
+  // 处理OPTIONS预检请求
   if (request.method === 'OPTIONS') {
-    return handleOptions(request);
+    return createCorsResponse();
   }
 
   try {
@@ -30,11 +31,11 @@ async function handleRequest(request, env, ctx) {
       case '/api/clear-cache':
         return handleClearCache(request, env, LINKS);
       default:
-        return jsonResponse({ error: 'Not Found' }, 404);
+        return createJsonResponse({ error: 'Not Found' }, 404);
     }
   } catch (err) {
     console.error('Error:', err);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    return createJsonResponse({ error: 'Internal server error' }, 500);
   }
 }
 
@@ -46,7 +47,7 @@ async function handleLinksRequest(request, env, ctx, LINKS) {
 
   const authResult = await verifyAdmin(request, env);
   if (!authResult.valid) {
-    return jsonResponse({ error: 'Unauthorized' }, 401);
+    return createJsonResponse({ error: 'Unauthorized' }, 401);
   }
 
   switch (request.method) {
@@ -57,7 +58,7 @@ async function handleLinksRequest(request, env, ctx, LINKS) {
     case 'DELETE':
       return handleDeleteLink(request, LINKS);
     default:
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return createJsonResponse({ error: 'Method not allowed' }, 405);
   }
 }
 
@@ -68,12 +69,13 @@ async function handleGetLinks(request, ctx, LINKS) {
 
   let response = await cache.match(cacheKey);
   if (response) {
+    response = new Response(response.body, response);
     response.headers.set('X-Cache', 'HIT');
-    return response;
+    return addCorsHeaders(response);
   }
 
   const links = await getLinksFromKV(LINKS);
-  response = jsonResponse(links);
+  response = createJsonResponse(links);
   response.headers.set('X-Cache', 'MISS');
 
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
@@ -85,7 +87,7 @@ async function handleGetLinks(request, ctx, LINKS) {
 async function handleAddLink(request, LINKS) {
   const data = await request.json();
   if (!data.name || !data.url) {
-    return jsonResponse({ error: 'Missing required fields' }, 400);
+    return createJsonResponse({ error: 'Missing required fields' }, 400);
   }
 
   const newLink = {
@@ -98,13 +100,25 @@ async function handleAddLink(request, LINKS) {
   };
 
   await addLinkToKV(LINKS, newLink);
-  return jsonResponse({ success: true, id: newLink.id });
+  return createJsonResponse({ success: true, id: newLink.id });
+}
+
+// 更新链接 (需要实现)
+async function handleUpdateLink(request, LINKS) {
+  // 实现更新逻辑
+  return createJsonResponse({ error: 'Not implemented' }, 501);
+}
+
+// 删除链接 (需要实现)
+async function handleDeleteLink(request, LINKS) {
+  // 实现删除逻辑
+  return createJsonResponse({ error: 'Not implemented' }, 501);
 }
 
 // 登录处理
 async function handleLogin(request, env) {
   if (request.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
+    return createJsonResponse({ error: 'Method not allowed' }, 405);
   }
 
   try {
@@ -115,13 +129,13 @@ async function handleLogin(request, env) {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       const JWT_SECRET = env.JWT_SECRET;
       const token = await createJWT({ username, role: 'admin' }, JWT_SECRET);
-      return jsonResponse({ token });
+      return createJsonResponse({ token });
     }
 
-    return jsonResponse({ error: 'Invalid credentials' }, 401);
+    return createJsonResponse({ error: 'Invalid credentials' }, 401);
   } catch (err) {
     console.error('Login error:', err);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    return createJsonResponse({ error: 'Internal server error' }, 500);
   }
 }
 
@@ -195,40 +209,46 @@ async function addLinkToKV(LINKS, newLink) {
 // 其他 API 路由
 async function handleValidateToken(request, env) {
   const authResult = await verifyAdmin(request, env);
-  return jsonResponse({ valid: authResult.valid });
+  return createJsonResponse({ valid: authResult.valid });
 }
 
 async function handleClearCache(request, env, LINKS) {
   const authResult = await verifyAdmin(request, env);
   if (!authResult.valid) {
-    return jsonResponse({ error: 'Unauthorized' }, 401);
+    return createJsonResponse({ error: 'Unauthorized' }, 401);
   }
 
   await LINKS.delete('links');
-  return jsonResponse({ success: true });
+  return createJsonResponse({ success: true });
 }
 
 // 响应助手
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+function createJsonResponse(data, status = 200) {
+  const response = new Response(JSON.stringify(data), {
     status,
     headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Content-Type': 'application/json'
     }
   });
+  return addCorsHeaders(response);
 }
 
-function handleOptions(request) {
+function createCorsResponse() {
   return new Response(null, {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400'
     }
   });
+}
+
+function addCorsHeaders(response) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return response;
 }
 
 function base64url(input) {
