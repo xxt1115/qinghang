@@ -32,6 +32,8 @@ async function handleRequest(request, env, ctx) {
         return handleValidateToken(request, env);
       case '/api/clear-cache':
         return handleClearCache(request, env, LINKS);
+      case '/api/links/bulk-delete':
+        return handleBulkDeleteLinks(request, env, LINKS);
       default:
         return createJsonResponse({ error: 'Not Found' }, 404);
     }
@@ -198,6 +200,41 @@ async function handleDeleteLink(request, LINKS) {
     }, 500);
   }
 }
+
+// 批量删除链接
+async function handleBulkDeleteLinks(request, env, LINKS) {
+  if (request.method !== 'POST') {
+    return createJsonResponse({ error: 'Method not allowed' }, 405);
+  }
+
+  const authResult = await verifyAdmin(request, env);
+  if (!authResult.valid) {
+    return createJsonResponse({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const { ids } = await request.json();
+    if (!Array.isArray(ids)) {
+      return createJsonResponse({ error: 'Expected an array of IDs' }, 400);
+    }
+
+    const links = await getLinksFromKV(LINKS);
+    const remainingLinks = links.filter(link => !ids.includes(link.id));
+    const deletedCount = links.length - remainingLinks.length;
+
+    await LINKS.put('links', JSON.stringify(remainingLinks));
+
+    return createJsonResponse({
+      success: true,
+      deleted: deletedCount,
+      remaining: remainingLinks.length
+    });
+  } catch (err) {
+    console.error('Bulk delete error:', err);
+    return createJsonResponse({ error: 'Bulk delete failed', details: err.message }, 500);
+  }
+}
+
 
 // 登录处理
 async function handleLogin(request, env) {
